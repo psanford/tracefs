@@ -177,6 +177,21 @@ func (i *Instance) AddUprobeEvent(e *UprobeEvent) error {
 	return f.Close()
 }
 
+func (i *Instance) RemoveUprobeEvent(e *UprobeEvent) error {
+	f, err := os.OpenFile(filepath.Join(i.path, "uprobe_events"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = fmt.Fprintln(f, e.RemoveRule())
+	if err != nil {
+		return err
+	}
+
+	return f.Close()
+}
+
 func (i *Instance) TracePipe() (io.ReadCloser, error) {
 	return os.Open(filepath.Join(i.path, "trace_pipe"))
 }
@@ -214,6 +229,25 @@ func (e *UprobeEvent) Rule() string {
 	return builder.String()
 }
 
+func (e *UprobeEvent) RemoveRule() string {
+	var builder strings.Builder
+	builder.Write([]byte("-"))
+	if e.Group != "" && e.Event != "" {
+		fmt.Fprintf(&builder, ":%s/%s", e.Group, e.Event)
+	} else if e.Event != "" {
+		fmt.Fprintf(&builder, ":%s", e.Event)
+	}
+
+	fmt.Fprintf(&builder, " %s:0x%016x", e.Path, e.Offset)
+
+	for _, arg := range e.FetchArgs {
+		fmt.Fprintf(&builder, " %s", arg.String())
+	}
+
+	return builder.String()
+
+}
+
 func (i *Instance) UprobeEnablePath(e *UprobeEvent) string {
 	if e.Group != "" && e.Event != "" {
 		return filepath.Join(i.path, "events", e.Group, e.Event, "enable")
@@ -225,11 +259,11 @@ func (i *Instance) UprobeEnablePath(e *UprobeEvent) string {
 }
 
 func (i *Instance) EnableUprobe(e *UprobeEvent) error {
-	return i.writeFile(i.UprobeEnablePath(e), []byte("1"))
+	return ioutil.WriteFile(i.UprobeEnablePath(e), []byte("1"), 0777)
 }
 
 func (i *Instance) DisableUprobe(e *UprobeEvent) error {
-	return i.writeFile(i.UprobeEnablePath(e), []byte("0"))
+	return ioutil.WriteFile(i.UprobeEnablePath(e), []byte("0"), 0777)
 }
 
 type FetchArg interface {
